@@ -1,6 +1,6 @@
 {
     "name": "ssignals",
-    "url": "https://github.com/sEngineLibs/ssignals",
+    "url": "https://github.com/selibs/ssignals",
     "license": "Apache",
     "tags": ["signals", "slots", "sugar"],
     "version": "0.0.1",
