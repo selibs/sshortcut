@@ -1,5 +1,5 @@
--L ssignals
--D analyzer-optimize
+extraParams.hxml
+-cp src
 -cp tests
 --main Test
 --interp

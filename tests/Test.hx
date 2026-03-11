@@ -1,21 +1,68 @@
 package;
 
-@:build(ssignals.Signals.build())
+@:build(s.shortcut.Macro.build())
 class Test {
-	public static function main() {
-		var test = new Test();
-		test.onTest(x -> trace(x));
-		test.test(1);
-		test.test(2);
-		test.test(3);
+	@:track static var a:Int;
+
+	@:alias static var x:Int = a;
+
+	@:readonly @:alias static var _flush:Void->Void = flushClass;
+
+	@:inject var i:Int;
+
+	@:slot(aDirty)
+	function __syncA__(a) {
+		trace(a);
 	}
 
-	@:signal function test(x:Int);
+	public function new(i:Int) {
+		this.i = i;
+	}
 
-	public function new() {}
+	public static function main() {
+		var m1 = new Test(1);
+		var m2 = new Test(2);
 
-	@:slot(test)
-	function __test__(x:Int) {
-		trace('Slot: ${x + 1}');
+		a = 1;
+		trace("a: " + a); // 1
+		trace("x: " + x); // 1
+		x = 2;
+		trace("a: " + a); // 2
+		trace("x: " + x); // 2
+
+		_flush(); // 2 __syncA__ calls (3, 4)
+
+		var t1 = new TestBar();
+		var t2 = new TestBarBar();
+		t1.foo.emit(); // foo called
+		t2.foo.emit(); // overriden foo called
+		TestBar.fooStatic.emit(); // 2 foo calls (bar + overriden)
+		TestBarBar.fooStatic.emit(); // overriden foo called
+	}
+}
+
+@:build(s.shortcut.Macro.build())
+@:autoBuild(s.shortcut.Macro.build())
+class TestFoo {
+	@:signal public function foo();
+
+	public function new(a:Int = 1) {}
+}
+
+class TestBar extends TestFoo {
+	@:signal public static function fooStatic();
+
+	@:slot(foo, fooStatic)
+	function syncFoo() {
+		trace("foo called");
+	}
+}
+
+class TestBarBar extends TestBar {
+	@:signal public static function fooStatic();
+
+	@:slot(fooStatic)
+	override function syncFoo() {
+		trace("overriden foo called");
 	}
 }

@@ -1,11 +1,11 @@
 {
-    "name": "ssignals",
-    "url": "https://github.com/selibs/ssignals",
+    "name": "sshortcut",
+    "url": "https://github.com/selibs/sshortcut",
     "license": "Apache",
     "tags": ["signals", "slots", "sugar"],
     "version": "0.0.1",
     "classPath": "src",
-    "description": "A lightweight Haxe library that implements a signals and slots system for easy event-driven communication between objects.",
+    "description": "A lightweight Haxe library that implements various meta shortcuts for easy event-driven communication between objects.",
     "contributors": ["smoothie"],
     "releasenote": "Initial release"
 }
