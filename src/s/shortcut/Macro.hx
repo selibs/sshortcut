@@ -155,7 +155,7 @@ class Macro {
 							else
 								exprs.push(macro $signal.connect(@:pos(slot.field.pos) $i{slot.field.name}));
 						default:
-							Context.error("Signal name expected", signal.pos);
+							exprs.push(macro $signal.connect(@:pos(slot.field.pos) $i{slot.field.name}));
 					}
 				}
 			constructor.expr = EBlock(exprs);
@@ -269,7 +269,7 @@ class Macro {
 				}
 			case FVar(t, _), FProp(_, _, t, _):
 				var signalName = field.name + "Changed";
-				injectProp(fields, field, r -> macro {$i{signalName}.emit($r); return $r;});
+				injectProp(fields, field, r -> macro {$i{signalName}($r); return $r;});
 				var signal:Field = {
 					access: field.access,
 					name: signalName,
@@ -336,7 +336,7 @@ class Macro {
 
 		return macro if ($markerRef) {
 			$markerRef = false;
-			$i{signalName}.emit($i{valName});
+			$i{signalName}($i{valName});
 		}
 	}
 

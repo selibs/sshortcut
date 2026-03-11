@@ -6,44 +6,55 @@ import haxe.macro.Expr;
 import haxe.Constraints.Function;
 
 @:forward.new
-class Signal<T:Function> {
-	var i:Int = 0;
-	var slots:Array<T>;
-
+abstract Signal<T:Function>(SignalData<T>) {
 	public var count(get, never):Int;
 
-	public function new(?slots:Array<T>) {
-		this.slots = slots ?? [];
-	}
+	@:to
+	inline function toData():SignalData<T>
+		return this;
 
+	@:op(a())
 	macro public function emit(self:Expr, exprs:Array<Expr>)
-		return macro @:privateAccess
-			if ($self.i == 0) try {
-				while ($self.i < $self.count)
-					$self.slots[$self.i++]($a{exprs});
-				$self.i = 0;
-			} catch (e) {
-				$self.i = 0;
-				throw e;
-			}
+		return macro @:privateAccess {
+			final __self = $self.toData();
+			if (__self.i == 0)
+				try {
+					while (__self.i < __self.slots.length)
+						__self.slots[__self.i++]($a{exprs});
+					__self.i = 0;
+				} catch (e) {
+					__self.i = 0;
+					throw e;
+				}
+		}
 
 	public function connect(slot:T) {
-		if (!slots.contains(slot))
-			slots.push(slot);
+		if (!this.slots.contains(slot))
+			this.slots.push(slot);
 		return slot;
 	}
 
 	public function disconnect(slot:T) {
-		final ind = slots.indexOf(slot);
+		final ind = this.slots.indexOf(slot);
 		final r = ind >= 0;
 		if (r) {
-			if (ind < i)
-				--i;
-			slots.splice(ind, 1);
+			if (ind < this.i)
+				--this.i;
+			this.slots.splice(ind, 1);
 		}
 		return r;
 	}
 
 	inline function get_count():Int
-		return slots.length;
+		return this.slots.length;
+}
+
+@:allow(s.shortcut.Signal)
+private class SignalData<T:Function> {
+	var i:Int = 0;
+	var slots:Array<T>;
+
+	public function new(?slots:Array<T>) {
+		this.slots = slots ?? [];
+	}
 }

@@ -34,10 +34,10 @@ class Test {
 
 		var t1 = new TestBar();
 		var t2 = new TestBarBar();
-		t1.foo.emit(); // foo called
-		t2.foo.emit(); // overriden foo called
-		TestBar.fooStatic.emit(); // 2 foo calls (bar + overriden)
-		TestBarBar.fooStatic.emit(); // overriden foo called
+		t1.foo(); // foo called
+		t2.foo(); // overriden foo called
+		TestBar.fooStatic(); // 2 foo calls (bar + overriden)
+		TestBarBar.fooStatic(); // overriden foo called
 	}
 }
 
