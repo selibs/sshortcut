@@ -13,7 +13,6 @@ abstract Signal<T:Function>(SignalData<T>) {
 	inline function toData():SignalData<T>
 		return this;
 
-	@:op(a())
 	macro public function emit(self:Expr, exprs:Array<Expr>)
 		return macro @:privateAccess {
 			final __self = $self.toData();
@@ -27,6 +26,10 @@ abstract Signal<T:Function>(SignalData<T>) {
 					throw e;
 				}
 		}
+
+	@:op(a())
+	macro function call(self:Expr, exprs:Array<Expr>)
+		return macro $self.emit($a{exprs});
 
 	public function connect(slot:T) {
 		if (!this.slots.contains(slot))

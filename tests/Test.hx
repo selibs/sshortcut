@@ -2,17 +2,17 @@ package;
 
 @:build(s.shortcut.Macro.build())
 class Test {
-	@:track static var a:Int;
+	@:attr static var a:Int = 0;
+	@:attr static var b:Int = 0;
 
 	@:alias static var x:Int = a;
-
 	@:readonly @:alias static var _flush:Void->Void = flushClass;
 
-	@:inject var i:Int;
+	var i:Int;
 
 	@:slot(aDirty)
 	function __syncA__(a) {
-		trace(a);
+		trace(a + i);
 	}
 
 	public function new(i:Int) {
@@ -20,8 +20,24 @@ class Test {
 	}
 
 	public static function main() {
-		var m1 = new Test(1);
-		var m2 = new Test(2);
+		trace(@track a + @track b);
+
+		a = 1;
+		flushClass();
+
+		b = 2;
+		flushClass();
+
+		trace("track a + 1: " + (@track a + 1));
+
+		a = 1;
+		flushClass();
+
+		a = 2;
+		flushClass();
+
+		var m1 = new Main(1);
+		var m2 = new Main(2);
 
 		a = 1;
 		trace("a: " + a); // 1

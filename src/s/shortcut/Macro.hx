@@ -14,8 +14,20 @@ using haxe.macro.TypedExprTools;
 class Macro {
 	#if macro
 	public static function init() {
-		for (m in ["readonly", "writeonly", "alias", "inject", "signal", "slot", "track", "cache"])
-			Compiler.registerCustomMetadata({metadata: ":" + m, doc: "short"}, "cut");
+		for (m in [
+			":readonly",
+			":writeonly",
+			":alias",
+			":inject",
+			":cache",
+			":attr",
+			":signal",
+			":slot",
+			"connect",
+			"track",
+			"bind"
+		])
+			Compiler.registerCustomMetadata({metadata: m, doc: "short"}, "cut");
 	}
 
 	public static function build() {
@@ -28,15 +40,34 @@ class Macro {
 
 		var flush = null;
 		var classFlush = null;
-		var tracks = [];
-		var classTracks = [];
+		var attrs = [];
+		var classAttrs = [];
 
 		var invalid = null;
 		var classInvalid = null;
 		var cache = [];
 		var classCache = [];
 
-		for (field in fields) {
+		for (field in fields.copy()) {
+			switch field.kind {
+				case FFun(f):
+					// 	f.expr = buildConnect(f.expr);
+					if (constructor == null && field.name == "new")
+						constructor = f.expr;
+					if (flush == null && field.name == "flush")
+						flush = f.expr;
+					if (classFlush == null && field.name == "flushClass")
+						classFlush = f.expr;
+					if (invalid == null && field.name == "invalidateCache")
+						invalid = f.expr;
+					if (classInvalid == null && field.name == "invalidateClassCache")
+						classInvalid = f.expr;
+				default:
+				// case FVar(t, e):
+				// 	field.kind = FVar(t, buildConnect(e));
+				// case FProp(get, set, t, e):
+				// 	field.kind = FProp(get, set, t, buildConnect(e));
+			}
 			for (m in field.meta ?? []) {
 				var parts = m.name.split(".");
 				switch parts[0] {
@@ -54,12 +85,12 @@ class Macro {
 					case ":slot":
 						if (m.params != null && m.params.length > 0)
 							slots.push({field: field, signals: m.params});
-					case ":track":
-						var track = buildTrack(fields, field, signals);
+					case ":attr":
+						var attr = buildAttr(fields, field, signals);
 						if (field.access.contains(AStatic))
-							classTracks.push(track);
+							classAttrs.push(attr);
 						else
-							tracks.push(track);
+							attrs.push(attr);
 					case ":cache":
 						var c = buildCache(fields, field);
 						if (field.access.contains(AStatic))
@@ -70,41 +101,6 @@ class Macro {
 						continue;
 				}
 			}
-			if (constructor == null && field.name == "new")
-				switch field.kind {
-					case FFun(f):
-						constructor = f.expr;
-					default:
-						Context.error("Constructor must be function", field.pos);
-				}
-			if (flush == null && field.name == "flush")
-				switch field.kind {
-					case FFun(f):
-						flush = f.expr;
-					default:
-						Context.error("Reserved field name 'flush'", field.pos);
-				}
-			if (classFlush == null && field.name == "flushClass")
-				switch field.kind {
-					case FFun(f):
-						classFlush = f.expr;
-					default:
-						Context.error("Reserved field name 'flushClass'", field.pos);
-				}
-			if (invalid == null && field.name == "invalidateCache")
-				switch field.kind {
-					case FFun(f):
-						invalid = f.expr;
-					default:
-						Context.error("Reserved field name 'invalidateCache'", field.pos);
-				}
-			if (classInvalid == null && field.name == "invalidateClassCache")
-				switch field.kind {
-					case FFun(f):
-						classInvalid = f.expr;
-					default:
-						Context.error("Reserved field name 'invalidateClassCache'", field.pos);
-				}
 		}
 
 		if (slots.length > 0) {
@@ -161,10 +157,89 @@ class Macro {
 			constructor.expr = EBlock(exprs);
 		}
 
-		buildFlush(fields, flush, classFlush, tracks, classTracks);
+		buildFlush(fields, flush, classFlush, attrs, classAttrs);
 		buildInvalidate(fields, invalid, classInvalid, cache, classCache);
 
 		return fields;
+	}
+
+	static function buildConnect(expr:Expr):Expr {
+		function connect(expr:Expr) {
+			static var i = 0;
+
+			var con:Array<{name:String, signal:Expr, expr:Expr}> = [];
+
+			function replaceConnect(expr:Expr) {
+				var c = connect(expr);
+				if (c.connect != null)
+					con = con.concat(c.connect);
+				return c.expr;
+			}
+
+			if (expr == null)
+				return {connect: con, expr: expr};
+
+			switch expr.expr {
+				case EFunction(kind, f):
+					f.expr = buildConnect(f.expr);
+				case EBlock(exprs):
+					expr.expr = EBlock(exprs.map(buildConnect));
+				case EFor(it, expr):
+					expr.expr = EFor(replaceConnect(it), buildConnect(expr));
+				case EIf(econd, eif, eelse):
+					expr.expr = EIf(replaceConnect(econd), buildConnect(eif), buildConnect(eelse));
+				case EWhile(econd, e, normalWhile):
+					expr.expr = EWhile(replaceConnect(econd), buildConnect(e), normalWhile);
+				case ESwitch(e, cases, edef):
+					expr.expr = ESwitch(replaceConnect(e), cases.map(c -> {
+						values: c.values,
+						guard: c.guard,
+						expr: buildConnect(c.expr)
+					}), buildConnect(edef));
+				case ETry(e, catches):
+					expr.expr = ETry(replaceConnect(e), catches.map(c -> {
+						name: c.name,
+						type: c.type,
+						expr: buildConnect(c.expr)
+					}));
+				case ETernary(econd, eif, eelse):
+					expr.expr = ETernary(replaceConnect(econd), buildConnect(eif), buildConnect(eelse));
+				case EMeta(s, e):
+					var signal = switch s.name {
+						case "connect":
+							e;
+						case "track":
+							makeIdent(e, "Dirty");
+						case "bind":
+							makeIdent(e, "Changed");
+						default:
+							expr = expr.map(replaceConnect);
+					}
+					if (signal != null) {
+						expr.expr = e.expr;
+						con.push({name: "__c" + i++, signal: signal, expr: expr});
+					}
+				default:
+					expr = expr.map(replaceConnect);
+			}
+			return {connect: con, expr: expr}
+		}
+
+		function rename(expr:Expr, target:Expr, name:String)
+			return expr == target ? macro @:pos(expr.pos) $i{name} : expr.map(e -> rename(e, target, name));
+
+		var con = connect(expr);
+		if (con.connect.length > 0) {
+			var exprs = [];
+			for (c in con.connect) {
+				var name = c.name;
+				var signal = c.signal;
+				exprs.push(macro $signal.connect($name -> ${rename(expr, c.expr, name)}));
+			}
+			return macro @:pos(expr.pos) $b{exprs};
+		}
+		
+		return con.expr;
 	}
 
 	static function buildAccess(field:Field, read:Bool, write:Bool) {
@@ -286,7 +361,7 @@ class Macro {
 		});
 	}
 
-	static function buildTrack(fields:Array<Field>, field:Field, signals:Map<String, {isStatic:Bool, slots:Array<Expr>}>) {
+	static function buildAttr(fields:Array<Field>, field:Field, signals:Map<String, {isStatic:Bool, slots:Array<Expr>}>) {
 		// marker
 		var markerName = field.name + "IsDirty";
 		var markerRef = macro $i{markerName};
@@ -340,33 +415,33 @@ class Macro {
 		}
 	}
 
-	static function buildFlush(fields:Array<Field>, flush:Expr, classFlush:Expr, tracks:Array<Expr>, classTracks:Array<Expr>) {
-		if (tracks.length > 0) {
+	static function buildFlush(fields:Array<Field>, flush:Expr, classFlush:Expr, attrs:Array<Expr>, classAttrs:Array<Expr>) {
+		if (attrs.length > 0) {
 			if (flush == null)
 				if (fieldExists(Context.getLocalClass()?.get(), "flush"))
 					flush = macro super.flush();
 				else
 					flush = macro null;
-			tracks.unshift(flush);
+			attrs.unshift(flush);
 			fields.push({
 				name: "flush",
 				kind: FFun({
 					args: [],
-					expr: macro $b{tracks}
+					expr: macro $b{attrs}
 				}),
 				pos: Context.currentPos()
 			});
 		}
 
-		if (classTracks.length > 0)
-			classTracks.unshift(classFlush ?? macro null);
-		if (classTracks.length > 0)
+		if (classAttrs.length > 0)
+			classAttrs.unshift(classFlush ?? macro null);
+		if (classAttrs.length > 0)
 			fields.push({
 				name: "flushClass",
 				access: [AStatic],
 				kind: FFun({
 					args: [],
-					expr: macro $b{classTracks}
+					expr: macro $b{classAttrs}
 				}),
 				pos: Context.currentPos()
 			});
@@ -551,6 +626,20 @@ class Macro {
 			final __r = $e1;
 			${e2(macro __r)};
 		};
+	}
+
+	static function makeIdent(expr:Expr, ?add:String) {
+		add = add ?? "";
+		return switch expr.expr {
+			case EConst(CIdent(s)):
+				macro @:pos(expr.pos) $i{s + add};
+			case EField(e, field, kind):
+				field += add;
+				macro @:pos(expr.pos) ${makeIdent(e)}.$field;
+			default:
+				Context.error("Identifier expected", expr.pos);
+				null;
+		}
 	}
 	#end
 }
