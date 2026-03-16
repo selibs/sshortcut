@@ -1,6 +1,6 @@
 package s.shortcut;
 
 #if !macro
-@:autoBuild(s.shortcut.Macro.build())
+@:autoBuild(s.shortcut.ShortcutMacro.build())
 #end
 interface Shortcut {}

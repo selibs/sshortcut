@@ -16,7 +16,7 @@ private typedef TemplateDef = {params:Array<TypeParameter>, fields:Array<Field>}
 private typedef MixinDef = {> TemplateDef, decl:Array<Field>};
 
 #end
-class Macro {
+class ShortcutMacro {
 	#if macro
 	static var mixins:StringMap<MixinDef> = new StringMap();
 	static var builtTemplates:StringMap<TypePath> = new StringMap();
@@ -39,7 +39,7 @@ class Macro {
 			"bind"
 		])
 			Compiler.registerCustomMetadata({metadata: m, doc: "short"}, "cut");
-		Compiler.addGlobalMetadata("", "@:build(s.shortcut.Macro.mixinBuild())");
+		Compiler.addGlobalMetadata("", "@:build(s.shortcut.ShortcutMacro.mixinBuild())");
 	}
 
 	public static function mixinBuild():Array<Field> {
@@ -382,9 +382,11 @@ class Macro {
 				var slotT:ComplexType = TFunction(slotArgs, macro :Void);
 
 				if (keyT == null)
-					field.kind = FProp("default", "never", macro :s.shortcut.Signal<$slotT>, gen ? macro new s.shortcut.Signal($slotsExpr) : null);
+					field.kind = FProp("default", "never", macro :s.shortcut.signals.Signal<$slotT>,
+						gen ? macro new s.shortcut.signals.Signal($slotsExpr) : null);
 				else
-					field.kind = FProp("default", "never", macro :s.shortcut.KeySignal<$keyT, $slotT>, gen ? macro new s.shortcut.KeySignal($slotsExpr) : null);
+					field.kind = FProp("default", "never", macro :s.shortcut.signals.KeySignal<$keyT, $slotT>,
+						gen ? macro new s.shortcut.signals.KeySignal($slotsExpr) : null);
 
 				// sugar
 				var name = field.name.charAt(0).toUpperCase() + field.name.substr(1);
@@ -667,7 +669,7 @@ class Macro {
 		if (cls.params.length == 0)
 			Context.error("Base class type parameter expected", cls.pos);
 		cls.meta.extract(":genericBuild");
-		cls.meta.add(":genericBuild", [macro s.shortcut.Macro.buildTemplate()], cls.pos);
+		cls.meta.add(":genericBuild", [macro s.shortcut.ShortcutMacro.buildTemplate()], cls.pos);
 		templates.set(ref.toString(), {params: cls.params, fields: copyFields(fields)});
 		return [for (field in fields) stubField(field)];
 	}

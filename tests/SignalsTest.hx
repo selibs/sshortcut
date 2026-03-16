@@ -1,7 +1,7 @@
 package;
 
-@:build(s.shortcut.Macro.build())
-@:autoBuild(s.shortcut.Macro.build())
+@:build(s.shortcut.ShortcutMacro.build())
+@:autoBuild(s.shortcut.ShortcutMacro.build())
 class TestFoo {
 	@:signal public function foo();
 
@@ -26,7 +26,7 @@ class TestBarBar extends TestBar {
 	}
 }
 
-@:build(s.shortcut.Macro.build())
+@:build(s.shortcut.ShortcutMacro.build())
 class SignalsTest {
 	@:attr static var a:Int = 0;
 	@:attr static var b:Int = 0;

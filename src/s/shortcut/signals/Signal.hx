@@ -1,34 +1,30 @@
-package s.shortcut;
+package s.shortcut.signals;
 
+import haxe.PosInfos;
 #if macro
 import haxe.macro.Expr;
 #end
 import haxe.Constraints.Function;
 
 @:forward.new
-abstract KeySignal<K, T:Function>(KeySignalData<K, T>) {
+abstract Signal<T:Function>(SignalData<T>) {
 	public var count(get, never):Int;
 
 	@:to
-	inline function toData():KeySignalData<K, T>
+	inline function toData():SignalData<T>
 		return this;
 
 	macro public function emit(self:Expr, exprs:Array<Expr>) {
 		var e = [];
-		var key = exprs.shift();
 		e.push(macro final __self = $self.toData());
-		e.push(macro final __key = $key);
 		for (i in 0...exprs.length) {
 			var name = "__a" + i;
 			e.push(macro final $name = ${exprs[i]});
 			exprs[i] = macro @:pos(exprs[i].pos) $i{name};
 		}
 		e.push(macro if (__self.i == 0) try {
-			while (__self.i < __self.slots.length) {
-				final __slot = __self.slots[__self.i++];
-				if (__slot.key == __key)
-					__slot.f($a{exprs});
-			}
+			while (__self.i < __self.slots.length)
+				__self.slots[__self.i++]($a{exprs});
 			__self.i = 0;
 		} catch (e) {
 			__self.i = 0;
@@ -41,40 +37,42 @@ abstract KeySignal<K, T:Function>(KeySignalData<K, T>) {
 	macro function call(self:Expr, exprs:Array<Expr>)
 		return macro $self.emit($a{exprs});
 
-	public function connect(key:K, slot:T):T {
-		for (s in this.slots)
-			if (s.f == slot)
-				return slot;
-		this.slots.push({key: key, f: slot});
+	public function stop() {
+		if (this.i != 0)
+			this.i = this.slots.length;
+	}
+
+	public function connect(slot:T, priority:Int = 0):T {
+		final ind = this.slots.indexOf(slot);
+		if (ind == -1) {
+			if (priority < this.i)
+				++this.i;
+			this.slots.insert(priority, slot);
+		}
 		return slot;
 	}
 
 	public function disconnect(slot:T):Bool {
-		var ind = -1;
-		for (i in 0...this.slots.length)
-			if (this.slots[i].f == slot) {
-				ind = i;
-				break;
-			}
-		final r = ind >= 0;
-		if (r) {
+		final ind = this.slots.indexOf(slot);
+		if (ind >= 0) {
 			if (ind < this.i)
 				--this.i;
 			this.slots.splice(ind, 1);
+			return true;
 		}
-		return r;
+		return false;
 	}
 
 	inline function get_count():Int
 		return this.slots.length;
 }
 
-@:allow(s.shortcut.KeySignal)
-private class KeySignalData<K, T:Function> {
+@:allow(s.shortcut.signals.Signal)
+private class SignalData<T:Function> {
 	var i:Int = 0;
-	var slots:Array<{key:K, f:T}>;
+	var slots:Array<T>;
 
-	public function new(?slots:Array<{key:K, f:T}>) {
+	public function new(?slots:Array<T>) {
 		this.slots = slots ?? [];
 	}
 }
