@@ -32,6 +32,7 @@ class ShortcutMacro {
 			":inject",
 			":cache",
 			":attr",
+			":attr.group",
 			":signal",
 			":slot",
 			"connect",
@@ -142,12 +143,16 @@ class ShortcutMacro {
 					case ":slot":
 						slots.push({field: field, signals: m.params, pos: m.pos});
 					case ":attr":
-						var attr = buildAttr(gen, fields, field, signals);
-						if (attr != null)
-							if (field.access.contains(AStatic))
-								classAttrs.push(attr);
-							else
-								attrs.push(attr);
+						if (parts[1] == "group")
+							attrs.push(macro @:privateAccess $i{field.name}.flush());
+						else {
+							var attr = buildAttr(gen, fields, field, signals);
+							if (attr != null)
+								if (field.access.contains(AStatic))
+									classAttrs.push(attr);
+								else
+									attrs.push(attr);
+						}
 					case ":cache":
 						var c = buildCache(gen, fields, field);
 						if (c != null)
@@ -451,6 +456,13 @@ class ShortcutMacro {
 				valName = field.name;
 				signalName = valName + "Dirty";
 				signalType = t;
+				var canRead = switch field.kind {
+					case FVar(_, _): true;
+					case FProp(get, _, _, _): get != "never";
+					default: false;
+				};
+				if (canRead)
+					marker = macro if (__shortcutPreviousValue__ != $i{field.name}) $marker;
 				injectProp(gen, fields, field, null, r -> macro {$marker; return $r;});
 			case FFun(f):
 				if (gen && f.expr == null)
@@ -894,8 +906,15 @@ class ShortcutMacro {
 						}
 						pushAccessor(setterName, setter);
 					}
-					if (gen)
+					if (gen) {
+						if (get != "never") {
+							setter.expr = macro {
+								var __shortcutPreviousValue__ = $i{field.name};
+								${setter.expr};
+							}
+						}
 						setter.expr = replaceReturn(setter.expr, setExpr);
+					}
 				}
 			case _:
 				Context.error("Property expected", field.pos);
