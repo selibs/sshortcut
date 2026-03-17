@@ -143,10 +143,23 @@ class ShortcutMacro {
 					case ":slot":
 						slots.push({field: field, signals: m.params, pos: m.pos});
 					case ":attr":
+						var name = field.name;
+						var params = m.params ?? [];
+						if (params.length > 0) {
+							if (params.length == 1)
+								switch params[0].expr {
+									case EConst(CIdent(s)):
+										name = s;
+									default:
+										Context.error("Expected name", m.pos);
+								}
+							else
+								Context.error("Expected exactly 1 name", m.pos);
+						}
 						if (parts[1] == "group")
-							attrs.push(macro @:privateAccess $i{field.name}.flush());
+							attrs.push(macro @:privateAccess $i{name}.flush());
 						else {
-							var attr = buildAttr(gen, fields, field, signals);
+							var attr = buildAttr(gen, fields, field, name, signals);
 							if (attr != null)
 								if (field.access.contains(AStatic))
 									classAttrs.push(attr);
@@ -434,20 +447,27 @@ class ShortcutMacro {
 		});
 	}
 
-	static function buildAttr(gen:Bool, fields:Array<Field>, field:Field, signals:Map<String, {isStatic:Bool, slots:Array<Expr>}>) {
+	static function buildAttr(gen:Bool, fields:Array<Field>, field:Field, name:String, signals:Map<String, {isStatic:Bool, slots:Array<Expr>}>) {
 		if (!gen)
 			return null;
 
 		// marker
-		var markerName = field.name + "IsDirty";
+		var markerName = name + "IsDirty";
 		var markerRef = macro $i{markerName};
 		var marker = macro if (!$markerRef) $markerRef = true;
-		fields.push({
-			name: markerName,
-			access: field.access.contains(AStatic) ? [AStatic] : [],
-			kind: FProp("default", "null", macro :Bool, macro false),
-			pos: field.pos
-		});
+		var hasMarker = false;
+		for (f in fields)
+			if (f.name == markerName) {
+				hasMarker = true;
+				break;
+			}
+		if (!hasMarker)
+			fields.push({
+				name: markerName,
+				access: field.access.contains(AStatic) ? [AStatic] : [],
+				kind: FProp("default", "null", macro :Bool, macro false),
+				pos: field.pos
+			});
 
 		var refName = field.name.charAt(0).toUpperCase() + field.name.substr(1);
 		var valName, signalName, signalType;
@@ -483,20 +503,7 @@ class ShortcutMacro {
 					f.expr = injectReturn(f.expr, macro {$i{valName} = __r; $marker;});
 		}
 
-		// signal
-		var signal = {
-			name: signalName,
-			access: field.access,
-			kind: FFun({args: [{name: field.name, type: signalType}]}),
-			pos: field.pos
-		}
-		buildSignal(gen, fields, signal, signals);
-		fields.push(signal);
-
-		return macro if ($markerRef) {
-			$markerRef = false;
-			$i{signalName}($i{valName});
-		}
+		return macro $markerRef = false;
 	}
 
 	static function buildSlots(gen:Bool, fields:Array<Field>, slots:Array<{field:Field, signals:Array<Expr>, pos:Position}>,
