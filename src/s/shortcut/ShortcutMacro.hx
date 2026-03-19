@@ -482,7 +482,7 @@ class ShortcutMacro {
 					default: false;
 				};
 				if (canRead)
-					marker = macro if (__shortcutPreviousValue__ != $i{field.name}) $marker;
+					marker = macro if (__prev__ != $i{field.name}) $marker;
 				injectProp(gen, fields, field, null, r -> macro {$marker; return $r;});
 			case FFun(f):
 				if (gen && f.expr == null)
@@ -916,7 +916,7 @@ class ShortcutMacro {
 					if (gen) {
 						if (get != "never") {
 							setter.expr = macro {
-								var __shortcutPreviousValue__ = $i{field.name};
+								var __prev__ = $i{field.name};
 								${setter.expr};
 							}
 						}
