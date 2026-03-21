@@ -181,7 +181,7 @@ class ShortcutMacro {
 		}
 
 		buildSlots(gen, fields, slots, signals, constructor, superConstructor);
-		buildFlush(gen, fields, flush, classFlush, superFlush != null, attrs, classAttrs);
+		buildFlush(gen, cls, fields, flush, classFlush, superFlush != null, attrs, classAttrs);
 		buildInvalidate(gen, fields, invalid, classInvalid, superInvalid != null, cache, classCache);
 
 		return fields;
@@ -451,23 +451,42 @@ class ShortcutMacro {
 		if (!gen)
 			return null;
 
+		var isStatic = field.access.contains(AStatic);
+
 		// marker
 		var markerName = name + "IsDirty";
 		var markerRef = macro $i{markerName};
-		var marker = macro if (!$markerRef) $markerRef = true;
+		var marker = macro if (!$markerRef) {
+			$markerRef = true;
+		}
 		var hasMarker = false;
 		for (f in fields)
 			if (f.name == markerName) {
 				hasMarker = true;
 				break;
 			}
-		if (!hasMarker)
+		if (!hasMarker) {
 			fields.push({
 				name: markerName,
-				access: field.access.contains(AStatic) ? [AStatic] : [],
-				kind: FProp("default", "null", macro :Bool, macro false),
+				access: isStatic ? [AStatic] : [],
+				kind: FProp("default", "set", macro :Bool, macro false),
 				pos: field.pos
 			});
+			var ref = macro $i{isStatic ? "classIsDirty" : "isDirty"};
+			fields.push({
+				name: "set_" + markerName,
+				access: isStatic ? [AStatic] : [],
+				kind: FFun({
+					args: [{name: "value", type: macro :Bool}],
+					ret: macro :Bool,
+					expr: macro {
+						$ref = $ref || value;
+						return $markerRef = value;
+					}
+				}),
+				pos: field.pos
+			});
+		}
 
 		var refName = field.name.charAt(0).toUpperCase() + field.name.substr(1);
 		var valName, signalName, signalType;
@@ -495,7 +514,7 @@ class ShortcutMacro {
 				signalType = f.ret;
 				fields.push({
 					name: valName,
-					access: field.access.contains(AStatic) ? [AStatic] : [],
+					access: isStatic ? [AStatic] : [],
 					kind: FProp("default", "null"),
 					pos: field.pos
 				});
@@ -603,12 +622,20 @@ class ShortcutMacro {
 		constructor.expr = EBlock(exprs);
 	}
 
-	static function buildFlush(gen:Bool, fields:Array<Field>, flush:Expr, classFlush:Expr, overrides:Bool, attrs:Array<Expr>, classAttrs:Array<Expr>) {
+	static function buildFlush(gen:Bool, cls:ClassType, fields:Array<Field>, flush:Expr, classFlush:Expr, overrides:Bool, attrs:Array<Expr>,
+			classAttrs:Array<Expr>) {
 		if (!gen)
 			return;
 
 		if (attrs.length > 0) {
+			attrs.unshift(macro isDirty = false);
 			attrs.unshift(flush ?? (overrides ? macro super.flush() : macro null));
+			if (findField(cls, "isDirty") == null)
+				fields.push({
+					name: "isDirty",
+					kind: FVar(macro :Bool, macro false),
+					pos: Context.currentPos()
+				});
 			fields.push({
 				name: "flush",
 				access: overrides ? [AOverride] : [],
@@ -620,9 +647,14 @@ class ShortcutMacro {
 			});
 		}
 
-		if (classAttrs.length > 0)
+		if (classAttrs.length > 0) {
+			classAttrs.unshift(macro classIsDirty = false);
 			classAttrs.unshift(classFlush ?? macro null);
-		if (classAttrs.length > 0)
+			fields.push({
+				name: "classIsDirty",
+				kind: FVar(macro :Bool, macro false),
+				pos: Context.currentPos()
+			});
 			fields.push({
 				name: "flushClass",
 				access: [AStatic],
@@ -632,6 +664,7 @@ class ShortcutMacro {
 				}),
 				pos: Context.currentPos()
 			});
+		}
 	}
 
 	static function buildCache(gen:Bool, fields:Array<Field>, field:Field) {
