@@ -33,6 +33,7 @@ class ShortcutMacro {
 			":cache",
 			":attr",
 			":attr.group",
+			":marker",
 			":signal",
 			":slot",
 			"connect",
@@ -166,6 +167,12 @@ class ShortcutMacro {
 								else
 									attrs.push(attr);
 						}
+					case ":marker":
+						var expr = macro $i{field.name} = false;
+						if (field.access.contains(AStatic))
+							classAttrs.push(expr);
+						else
+							attrs.push(expr);
 					case ":cache":
 						var c = buildCache(gen, fields, field);
 						if (c != null)
