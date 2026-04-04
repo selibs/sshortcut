@@ -32,7 +32,7 @@ class ShortcutMacro {
 			":inject",
 			":cache",
 			":attr",
-			":attr.group",
+			":attr.attached",
 			":marker",
 			":signal",
 			":slot",
@@ -78,6 +78,9 @@ class ShortcutMacro {
 		var superFlush = null;
 		var superInvalid = null;
 
+		var dirtyExists = false;
+		var dirtySetterExists = false;
+
 		function findFields(cls:ClassType) {
 			if (cls == null)
 				return;
@@ -96,6 +99,10 @@ class ShortcutMacro {
 		var gen = cls != null && !cls.isExtern && !cls.isInterface;
 
 		for (field in fields.copy()) {
+			if (!dirtyExists && field.name == "isDirty")
+				dirtyExists = true;
+			if (!dirtySetterExists && field.name == "set_isDirty")
+				dirtySetterExists = true;
 			switch field.kind {
 				case FFun(f):
 					// f.expr = buildConnect(f.expr);
@@ -188,7 +195,7 @@ class ShortcutMacro {
 		}
 
 		buildSlots(gen, fields, slots, signals, constructor, superConstructor);
-		buildFlush(gen, cls, fields, flush, classFlush, superFlush != null, attrs, classAttrs);
+		buildFlush(gen, dirtyExists, dirtySetterExists, cls, fields, flush, classFlush, superFlush != null, attrs, classAttrs);
 		buildInvalidate(gen, fields, invalid, classInvalid, superInvalid != null, cache, classCache);
 
 		return fields;
@@ -629,19 +636,25 @@ class ShortcutMacro {
 		constructor.expr = EBlock(exprs);
 	}
 
-	static function buildFlush(gen:Bool, cls:ClassType, fields:Array<Field>, flush:Expr, classFlush:Expr, overrides:Bool, attrs:Array<Expr>,
-			classAttrs:Array<Expr>) {
+	static function buildFlush(gen:Bool, dirtyExists:Bool, dirtySetterExists:Bool, cls:ClassType, fields:Array<Field>, flush:Expr, classFlush:Expr,
+			overrides:Bool, attrs:Array<Expr>, classAttrs:Array<Expr>) {
 		if (!gen)
 			return;
 
 		if (attrs.length > 0) {
 			attrs.unshift(macro isDirty = false);
 			attrs.unshift(flush ?? (overrides ? macro super.flush() : macro null));
-			if (findField(cls, "isDirty") == null)
+			if (!dirtyExists && cls.findField("isDirty") == null)
 				fields.push({
 					name: "isDirty",
-					kind: FVar(macro :Bool, macro false),
-					pos: Context.currentPos()
+					kind: FProp("default", "set", macro :Bool, macro false),
+					pos: cls.pos
+				});
+			if (!dirtySetterExists && cls.findField("set_isDirty") == null)
+				fields.push({
+					name: "set_isDirty",
+					kind: FFun({args: [{name: "value", type: macro :Bool}], ret: macro :Bool, expr: macro return isDirty = value}),
+					pos: cls.pos
 				});
 			fields.push({
 				name: "flush",
@@ -650,7 +663,7 @@ class ShortcutMacro {
 					args: [],
 					expr: macro $b{attrs}
 				}),
-				pos: Context.currentPos()
+				pos: cls.pos
 			});
 		}
 
@@ -810,23 +823,8 @@ class ShortcutMacro {
 			}
 	}
 
-	static function fieldExists(cls:ClassType, name:String) {
-		return findField(cls, name) != null;
-	}
-
-	static function findField(cls:ClassType, name:String) {
-		if (cls == null)
-			return null;
-		if (name == "new") {
-			var field = cls.constructor?.get();
-			if (field != null)
-				return field;
-		}
-		var field = cls.findField(name);
-		if (field != null)
-			return field;
-		return findField(cls.superClass?.t.get(), name);
-	}
+	static function fieldExists(cls:ClassType, name:String)
+		return cls.findField(name) != null;
 
 	static function remapFields(fields:Array<Field>, types:Array<TypeParameter>, params:Array<Type>)
 		return [for (field in fields) mapField(copyField(field), types, params)];
