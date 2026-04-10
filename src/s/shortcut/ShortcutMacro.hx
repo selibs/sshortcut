@@ -513,19 +513,27 @@ private typedef MixinDef = {> TemplateDef, decl:Array<Field>};
 					kind: FProp("default", "set", macro :Bool, macro false),
 					pos: p.pos
 				});
-				fields.push({
-					access: access,
-					name: 'set_$g',
-					kind: FFun({
-						args: [{name: "value", type: macro :Bool}],
-						expr: macro {
-							if (value && !$baseMarker)
-								$baseMarker = true;
-							return $i{g} = value;
-						}
-					}),
-					pos: p.pos
-				});
+				var setterName = 'set_$g';
+				var hasSetter = false;
+				for (f in fields)
+					if (f.name == setterName) {
+						hasSetter = true;
+						break;
+					}
+				if (!hasSetter)
+					fields.push({
+						access: access,
+						name: setterName,
+						kind: FFun({
+							args: [{name: "value", type: macro :Bool}],
+							expr: macro {
+								if (value && !$baseMarker)
+									$baseMarker = true;
+								return $i{g} = value;
+							}
+						}),
+						pos: p.pos
+					});
 				attrGroups.set(g, true);
 			}
 		}

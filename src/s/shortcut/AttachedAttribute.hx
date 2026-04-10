@@ -1,6 +1,6 @@
 package s.shortcut;
 
-abstract class AttachedAttribute<T:{private var dirty(default, set):Bool;}> implements s.shortcut.Shortcut {
+abstract class AttachedAttribute<T:AttributeOwner> implements s.shortcut.Shortcut {
 	final object:T;
 	var dirty(default, set):Bool = false;
 
@@ -9,9 +9,9 @@ abstract class AttachedAttribute<T:{private var dirty(default, set):Bool;}> impl
 
 	function flush() {}
 
-	function set_dirty(value:Bool) @:privateAccess {
-		if (value && !object.dirty)
-			object.dirty = true;
+	function set_dirty(value:Bool) {
+		if (value)
+			object.markDirty();
 		return dirty = value;
 	}
 }
