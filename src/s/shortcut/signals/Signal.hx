@@ -37,18 +37,20 @@ abstract Signal<T:Function>(SignalData<T>) {
 	macro function call(self:Expr, exprs:Array<Expr>)
 		return macro $self.emit($a{exprs});
 
-	public function stop() {
+	public function stop()
 		if (this.i != 0)
 			this.i = this.slots.length;
-	}
 
-	public function connect(slot:T, priority:Int = 0):T {
+	public function connect(slot:T, pos:Int = -1):T {
 		final ind = this.slots.indexOf(slot);
-		if (ind == -1) {
-			if (priority < this.i)
-				++this.i;
-			this.slots.insert(priority, slot);
-		}
+		if (ind != -1)
+			return slot;
+
+		pos = pos > count ? count : (pos < 0 ? {var p = count + pos + 1; p < 0 ? 0 : p;} : pos);
+		if (pos < this.i)
+			++this.i;
+		this.slots.insert(pos, slot);
+
 		return slot;
 	}
 

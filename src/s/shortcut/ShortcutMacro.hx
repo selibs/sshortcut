@@ -19,8 +19,15 @@ private typedef TemplateDef = {
 
 private typedef MixinDef = {> TemplateDef, decl:Array<Field>};
 
+private typedef ConstructorInfo = {
+	isPublic:Bool,
+	args:Array<FunctionArg>
+};
+
 #end class ShortcutMacro {
 	#if macro
+	static var ctorCache:StringMap<Null<ConstructorInfo>> = new StringMap();
+	static var ctorLookup:StringMap<Bool> = new StringMap();
 	static var mixins:StringMap<MixinDef> = new StringMap();
 	static var builtTemplates:StringMap<TypePath> = new StringMap();
 	@:persistent static var templates:StringMap<TemplateDef> = new StringMap();
@@ -91,7 +98,7 @@ private typedef MixinDef = {> TemplateDef, decl:Array<Field>};
 			if (cls == null)
 				return;
 			if (superConstructor == null)
-				superConstructor = cls.constructor?.get();
+				superConstructor = findConstructor(cls);
 			if (superFlush == null)
 				superFlush = cls.findField("flush");
 			if (superInvalid == null)
@@ -112,11 +119,18 @@ private typedef MixinDef = {> TemplateDef, decl:Array<Field>};
 				dirtyExists = true;
 			if (!dirtySetterExists && field.name == "set_dirty")
 				dirtySetterExists = true;
+			var injectParams:Array<Expr> = [];
 			switch field.kind {
 				case FFun(f):
 					// f.expr = buildConnect(f.expr);
-					if (constructor == null && field.name == "new")
+					if (constructor == null && field.name == "new") {
 						constructor = f.expr;
+						if (cls != null)
+							ctorCache.set(constructorCacheKey(cls), {
+								isPublic: field.access.contains(APublic),
+								args: [for (arg in f.args) copyArg(arg)]
+							});
+					}
 					if (flush == null && field.name == "flush")
 						flush = f;
 					if (classFlush == null && field.name == "flushClass")
@@ -143,7 +157,7 @@ private typedef MixinDef = {> TemplateDef, decl:Array<Field>};
 						buildAlias(gen, fields, field);
 					case ":inject":
 						if (m.params != null && m.params.length > 0)
-							buildInject(gen, fields, field, m.params);
+							injectParams = injectParams.concat(m.params);
 					case ":signal":
 						var key = null;
 						if (m.params != null && m.params.length > 0)
@@ -203,6 +217,8 @@ private typedef MixinDef = {> TemplateDef, decl:Array<Field>};
 				}
 				meta.remove(m);
 			}
+			if (injectParams.length > 0)
+				buildInject(gen, fields, field, injectParams);
 		}
 
 		attrs = attrs.concat([for (k in attrGroups.keys()) macro $i{k}]);
@@ -369,6 +385,17 @@ private typedef MixinDef = {> TemplateDef, decl:Array<Field>};
 	}
 
 	static function buildInject(gen:Bool, fields:Array<Field>, field:Field, injections:Array<Expr>) {
+		function normalizeInjection(expr:Expr):Expr {
+			if (expr == null)
+				return null;
+			return switch expr.expr {
+				case EConst(CIdent(_)), EField(_, _, _):
+					{expr: ECall(expr, []), pos: expr.pos};
+				default:
+					expr;
+			}
+		}
+
 		switch field.kind {
 			case FVar(t, e):
 				field.kind = FProp("default", "set", t, e);
@@ -396,7 +423,7 @@ private typedef MixinDef = {> TemplateDef, decl:Array<Field>};
 				fields.push(setter);
 				buildInject(gen, fields, setter, injections);
 			case FFun(f):
-				var injection = macro $b{injections};
+				var injection = macro $b{[for (expr in injections) normalizeInjection(expr)]};
 				if (gen)
 					f.expr = f.expr != null ? injectReturn(f.expr, injection) : injection;
 		}
@@ -608,7 +635,7 @@ private typedef MixinDef = {> TemplateDef, decl:Array<Field>};
 	}
 
 	static function buildSlots(gen:Bool, fields:Array<Field>, slots:Array<{field:Field, signals:Array<Expr>, pos:Position}>,
-			signals:Map<String, {isStatic:Bool, slots:Array<Expr>}>, constructor:Expr, superConstructor:ClassField) {
+			signals:Map<String, {isStatic:Bool, slots:Array<Expr>}>, constructor:Expr, superConstructor:ConstructorInfo) {
 		function extractConnect(expr:Expr) {
 			return switch expr.expr {
 				case EConst(CIdent(s)):
@@ -633,36 +660,15 @@ private typedef MixinDef = {> TemplateDef, decl:Array<Field>};
 
 		if (constructor == null) {
 			var isPublic = false, args = [];
-			if (superConstructor != null)
-				switch superConstructor.expr().expr {
-					case TFunction(tfunc):
-						var values = [];
-						for (a in tfunc.args) {
-							var v = a.v;
-							var e = a.value;
-							values.push(macro $i{v.name});
-							args.push(({
-								name: v.name,
-								type: v.t.toComplexType(),
-								opt: e != null,
-								value: e != null ? switch e.expr {
-									case TConst(TInt(i)): macro $v{i};
-									case TConst(TFloat(s)): macro $v{Std.parseFloat(s)};
-									case TConst(TString(s)): macro $v{s};
-									case TConst(TBool(b)): macro $v{b};
-									case TConst(TNull): macro null;
-									case TConst(TThis): macro this;
-									case TConst(TSuper): macro super;
-									default:
-										Context.error("Constant value expected", e.pos);
-								} : null
-							} : FunctionArg));
-						}
-						isPublic = superConstructor.isPublic;
-						constructor = macro super($a{values});
-					default:
-						Context.error("Constructor must be function", superConstructor.pos);
+			if (superConstructor != null) {
+				var values = [];
+				for (a in superConstructor.args) {
+					values.push(macro $i{a.name});
+					args.push(copyArg(a));
 				}
+				isPublic = superConstructor.isPublic;
+				constructor = macro super($a{values});
+			}
 			else {
 				isPublic = false;
 				constructor = macro null;
@@ -1320,6 +1326,45 @@ private typedef MixinDef = {> TemplateDef, decl:Array<Field>};
 		} catch (e)
 			Context.error(e.message, pos);
 		return null;
+	}
+
+	static inline function constructorCacheKey(cls:ClassType):String
+		return cls.module + ":" + cls.name;
+
+	static function classFieldConstructorInfo(field:ClassField):ConstructorInfo {
+		var args:Array<FunctionArg> = [];
+		switch field.type {
+			case TFun(targs, _):
+				for (arg in targs)
+					args.push({
+						name: arg.name,
+						type: arg.t.toComplexType(),
+						opt: arg.opt,
+						value: null
+					});
+			case _:
+		}
+		return {
+			isPublic: field.isPublic,
+			args: args
+		};
+	}
+
+	static function findConstructor(cls:ClassType):Null<ConstructorInfo> {
+		if (cls == null)
+			return null;
+
+		final key = constructorCacheKey(cls);
+		if (ctorCache.exists(key))
+			return ctorCache.get(key);
+		if (ctorLookup.exists(key))
+			return null;
+
+		ctorLookup.set(key, true);
+		final found = cls.constructor != null ? classFieldConstructorInfo(cls.constructor.get()) : findConstructor(cls.superClass?.t.get());
+		ctorLookup.remove(key);
+		ctorCache.set(key, found);
+		return found;
 	}
 
 	static function copyField(field:Field):Field

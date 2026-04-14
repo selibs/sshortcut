@@ -46,14 +46,17 @@ abstract KeySignal<K, T:Function>(KeySignalData<K, T>) {
 			this.i = this.slots.length;
 	}
 
-	public function connect(key:K, slot:T, priority:Int = 0):T {
-		var i = 0;
-		while (i < this.slots.length)
-			if (this.slots[i++].f == slot)
+	public function connect(key:K, slot:T, pos:Int = 0):T {
+		var ind = 0;
+		while (ind < this.slots.length)
+			if (this.slots[ind++].f == slot)
 				return slot;
-		if (i < this.i)
+
+		pos = pos > count ? count : (pos < 0 ? {var p = count + pos + 1; p < 0 ? 0 : p;} : pos);
+		if (pos < this.i)
 			++this.i;
-		this.slots.insert(priority, {key: key, f: slot});
+		this.slots.insert(pos, {key: key, f: slot});
+
 		return slot;
 	}
 
