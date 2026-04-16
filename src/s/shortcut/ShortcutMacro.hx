@@ -376,9 +376,7 @@ private typedef ConstructorInfo = {
 					Context.error("Alias must be type-hinted", field.pos);
 
 				field.kind = FProp(get == "default" ? "get" : get, set == "default" ? "set" : set, t, null);
-				injectProp(gen, fields, field, r -> macro return $e, r -> macro return $e = $r, true);
-				if (!field.access.contains(AExtern))
-					field.access.push(AExtern);
+				injectProp(gen, fields, field, r -> macro return $e, r -> macro return $e = $r, field.access.contains(AExtern));
 			case FFun(f):
 				Context.error("Functions can't be aliases", field.pos);
 		}
@@ -668,8 +666,7 @@ private typedef ConstructorInfo = {
 				}
 				isPublic = superConstructor.isPublic;
 				constructor = macro super($a{values});
-			}
-			else {
+			} else {
 				isPublic = false;
 				constructor = macro null;
 				args = [];
