@@ -108,6 +108,7 @@ private typedef ConstructorInfo = {
 		var cls = Context.getLocalClass()?.get();
 		if (cls != null)
 			findFields(cls.superClass?.t.get());
+		final isAttachedAttribute = cls != null && isAttachedAttributeClass(cls);
 
 		var gen = cls != null && !cls.isExtern && !cls.isInterface;
 		#if display
@@ -221,8 +222,10 @@ private typedef ConstructorInfo = {
 				buildInject(gen, fields, field, injectParams);
 		}
 
-		attrs = attrs.concat([for (k in attrGroups.keys()) macro $i{k}]);
-		classAttrs = classAttrs.concat([for (k in classAttrGroups.keys()) macro $i{k}]);
+		if (!isAttachedAttribute) {
+			attrs = attrs.concat([for (k in attrGroups.keys()) macro @:bypassAccessor $i{k} = false]);
+			classAttrs = classAttrs.concat([for (k in classAttrGroups.keys()) macro @:bypassAccessor $i{k} = false]);
+		}
 
 		buildSlots(gen, fields, slots, signals, constructor, superConstructor);
 		buildFlush(gen, dirtyExists, dirtySetterExists, cls, fields, flush, classFlush, superFlush != null, attrs, classAttrs);
@@ -347,6 +350,16 @@ private typedef ConstructorInfo = {
 
 		// return con.expr;
 		return expr;
+	}
+
+	static function isAttachedAttributeClass(cls:ClassType):Bool {
+		var current = cls;
+		while (current != null) {
+			if (current.module == "s.shortcut.AttachedAttribute" && current.name == "AttachedAttribute")
+				return true;
+			current = current.superClass?.t.get();
+		}
+		return false;
 	}
 
 	static function buildAccess(gen:Bool, field:Field, read:Bool, write:Bool) {
@@ -475,8 +488,8 @@ private typedef ConstructorInfo = {
 						access: field.access,
 						kind: FFun({
 							args: args,
-							ret: f.key == "on" ? slotT : macro :Bool,
-							expr: gen ? (macro return $i{field.name}.$m($a{params})) : null
+							expr: gen ? (field.access.contains(AStatic) ? macro $i{field.name}.$m($a{params}) : macro {$i{field.name}.$m($a{params}); return
+								this;}) : null
 						}),
 						pos: field.pos
 					});
