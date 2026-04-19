@@ -485,7 +485,7 @@ private typedef ConstructorInfo = {
 
 					fields.push({
 						name: f.key + name,
-						access: field.access,
+						access: field.access.concat(field.access.contains(AExtern) ? [] : [AExtern]).concat(field.access.contains(AInline) ? [] : [AInline]),
 						kind: FFun({
 							args: args,
 							expr: gen ? (field.access.contains(AStatic) ? macro $i{field.name}.$m($a{params}) : macro {$i{field.name}.$m($a{params}); return
@@ -496,7 +496,7 @@ private typedef ConstructorInfo = {
 				}
 			case FVar(t, _), FProp(_, _, t, _):
 				var signalName = field.name + "Changed";
-				injectProp(gen, fields, field, r -> macro {$i{signalName}($r); return $r;});
+				injectProp(gen, fields, field, null, r -> macro {$i{signalName}($r); return $r;});
 				var signal:Field = {
 					access: field.access,
 					name: signalName,
