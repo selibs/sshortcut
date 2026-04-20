@@ -1,5 +1,6 @@
 package s.shortcut;
 
+@:nullSafety
 abstract class AttachedAttribute<T:AttributeOwner> implements s.shortcut.Shortcut {
 	final object:T;
 	var dirty(default, set):Bool = false;
@@ -10,7 +11,7 @@ abstract class AttachedAttribute<T:AttributeOwner> implements s.shortcut.Shortcu
 	function flush() {}
 
 	function set_dirty(value:Bool) {
-		if (value)
+		if (value && object != null)
 			object.markDirty();
 		return dirty = value;
 	}
