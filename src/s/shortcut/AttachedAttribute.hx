@@ -1,12 +1,16 @@
 package s.shortcut;
 
-@:nullSafety
-abstract class AttachedAttribute<T:AttributeOwner> implements s.shortcut.Shortcut {
-	final object:T;
+typedef AttachedAttributeOwner = {function markDirty():Void;}
+
+abstract class AttachedAttribute<T:AttachedAttributeOwner> implements s.shortcut.Shortcut {
+	var object:T;
 	var dirty(default, set):Bool = false;
 
-	public function new(object:T)
+	public function new(?object:T)
 		this.object = object;
+
+	public function markDirty():Void
+		dirty = true;
 
 	function flush() {}
 
