@@ -1,6 +1,5 @@
 package s.shortcut.signals;
 
-import haxe.PosInfos;
 #if macro
 import haxe.macro.Expr;
 #end
