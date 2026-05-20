@@ -422,12 +422,14 @@ private typedef ConstructorInfo = {
 						return;
 					}
 
+				var valName = "__value__";
+				var valRef = macro $i{valName};
 				var setter = {
 					name: setterName,
 					access: [APrivate].concat(field.access.contains(AStatic) ? [AStatic] : []),
 					kind: FFun({
-						args: [{name: "value", type: t}],
-						expr: gen ? (canRead ? macro return $i{field.name} = value : macro return value) : null
+						args: [{name: valName, type: t}],
+						expr: gen ? (canRead ? macro return $i{field.name} = $valRef : macro return $valRef) : null
 					}),
 					pos: field.pos
 				}
@@ -488,8 +490,10 @@ private typedef ConstructorInfo = {
 						access: field.access.concat(field.access.contains(AExtern) ? [] : [AExtern]).concat(field.access.contains(AInline) ? [] : [AInline]),
 						kind: FFun({
 							args: args,
-							expr: gen ? (field.access.contains(AStatic) ? macro $i{field.name}.$m($a{params}) : macro {$i{field.name}.$m($a{params}); return
-								this;}) : null
+							expr: gen ? (field.access.contains(AStatic) ? macro $i{field.name}.$m($a{params}) : macro {
+								$i{field.name}.$m($a{params});
+								return this;
+							}) : null
 						}),
 						pos: field.pos
 					});
@@ -558,20 +562,23 @@ private typedef ConstructorInfo = {
 						hasSetter = true;
 						break;
 					}
-				if (!hasSetter)
+				if (!hasSetter) {
+					var valName = "__value__";
+					var valRef = macro $i{valName};
 					fields.push({
 						access: access,
 						name: setterName,
 						kind: FFun({
-							args: [{name: "value", type: macro :Bool}],
+							args: [{name: valName, type: macro :Bool}],
 							expr: macro {
-								if (value && !$baseMarker)
+								if ($valRef)
 									$baseMarker = true;
-								return $i{g} = value;
+								return $i{g} = $valRef;
 							}
 						}),
 						pos: p.pos
 					});
+				}
 				attrGroups.set(g, true);
 			}
 		}
@@ -594,14 +601,17 @@ private typedef ConstructorInfo = {
 				kind: FProp("default", "set", macro :Bool, macro false),
 				pos: field.pos
 			});
+			var valName = "__value__";
+			var valRef = macro $i{valName};
+			var markerGroups = [macro if ($valRef) $baseMarker = true].concat(groups.slice(1).map(g -> macro if ($valRef && !$g) $g = true));
 			fields.push({
 				name: "set_" + markerName,
 				access: access,
 				kind: FFun({
-					args: [{name: "value", type: macro :Bool}],
+					args: [{name: valName, type: macro :Bool}],
 					ret: macro :Bool,
 					expr: macro $b{
-						groups.map(g -> macro if (value && !$g) $g = true).concat([macro return $markerRef = value])
+						markerGroups.concat([macro return $markerRef = $valRef])
 					}
 				}),
 				pos: field.pos
@@ -734,12 +744,15 @@ private typedef ConstructorInfo = {
 					kind: FProp("default", "set", macro :Bool, macro false),
 					pos: cls.pos
 				});
-			if (!dirtySetterExists && cls.findField("set_dirty") == null)
+			if (!dirtySetterExists && cls.findField("set_dirty") == null) {
+				var valName = "__value__";
+				var valRef = macro $i{valName};
 				fields.push({
 					name: "set_dirty",
-					kind: FFun({args: [{name: "value", type: macro :Bool}], ret: macro :Bool, expr: macro return dirty = value}),
+					kind: FFun({args: [{name: valName, type: macro :Bool}], ret: macro :Bool, expr: macro return dirty = $valRef}),
 					pos: cls.pos
 				});
+			}
 			var flushExpr = macro $b{attrs};
 			if (flush == null)
 				fields.push({
@@ -843,7 +856,9 @@ private typedef ConstructorInfo = {
 						break;
 					}
 				if (setter == null) {
-					setter = {args: [{name: "value", type: t}]}
+					var valName = "__value__";
+					var valRef = macro $i{valName};
+					setter = {args: [{name: valName, type: t}]}
 					fields.push({
 						name: 'set_${field.name}',
 						pos: field.pos,
@@ -1067,10 +1082,12 @@ private typedef ConstructorInfo = {
 
 				if (setExpr != null) {
 					if (setter == null) {
+						var valName = "__value__";
+						var valRef = macro $i{valName};
 						setter = {
-							args: [{name: "value", type: t}],
+							args: [{name: valName, type: t}],
 							ret: t,
-							expr: gen ? (isVar ? macro return @:pos(field.pos) $i{field.name} = value : macro return value) : null
+							expr: gen ? (isVar ? macro return @:pos(field.pos) $i{field.name} = $valRef : macro return $valRef) : null
 						}
 						pushAccessor(setterName, setter);
 					}

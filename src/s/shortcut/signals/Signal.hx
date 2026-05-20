@@ -64,6 +64,10 @@ abstract Signal<T:Function>(SignalData<T>) {
 		return false;
 	}
 
+	public function destroy()
+		while (count > 0)
+			this.slots.pop();
+
 	inline function get_count():Int
 		return this.slots.length;
 }
